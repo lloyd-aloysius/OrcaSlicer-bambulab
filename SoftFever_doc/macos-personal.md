@@ -50,6 +50,8 @@ The printer fixture loads only in the test runner. It has a fake account, an in-
 tests/macos/native_runtime.sh "/path/to/native/plugins" "/path/to/network_plugin.zip"
 ```
 
+The [Apple Silicon verification report](macos-personal-verification.md) records the tested build, DMG checksum and results.
+
 ## When the printer arrives
 
 Record the printer model, firmware, nozzle and AMS configuration. Use a small sliced model and record the result of each applicable check.
