@@ -60,6 +60,9 @@ constexpr int AUTO_IGNORED_PRINT_ERROR_0503409D = 0x0503409D;
 
 inline bool is_auto_ignored_print_error(int error_code)
 {
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+    return false;
+#else
     switch (error_code) {
     case AUTO_IGNORED_PRINT_ERROR_0500409D:
     case AUTO_IGNORED_PRINT_ERROR_0501409D:
@@ -69,6 +72,7 @@ inline bool is_auto_ignored_print_error(int error_code)
     default:
         return false;
     }
+#endif
 }
 
 inline bool is_auto_ignored_print_error_code_string(const std::string& raw_error_code)
@@ -98,6 +102,9 @@ inline std::string build_hms_long_error_code(unsigned attr, unsigned code)
 
 inline bool should_filter_hms_item(unsigned attr, unsigned code)
 {
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+    return false;
+#else
     if ((attr == 83887104 && code == 65604) ||
         (attr == 83952640 && code == 65604) ||
         (attr == 84018176 && code == 65604) ||
@@ -113,6 +120,7 @@ inline bool should_filter_hms_item(unsigned attr, unsigned code)
     }
 
     return is_auto_ignored_print_error_code_string(build_hms_long_error_code(attr, code));
+#endif
 }
 
 inline void auto_ignore_print_error_if_needed(Slic3r::MachineObject* obj)

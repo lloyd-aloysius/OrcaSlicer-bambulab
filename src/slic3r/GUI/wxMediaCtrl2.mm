@@ -50,7 +50,7 @@ wxMediaCtrl2::wxMediaCtrl2(wxWindow * parent)
     : wxWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize)
 {
     NSView * imageView = (NSView *) GetHandle();
-    imageView.layer = [[CALayer alloc] init];
+    imageView.layer = [CALayer layer];
     CGColorRef color = CGColorCreateGenericRGB(0, 0, 0, 1.0f);
     imageView.layer.backgroundColor = color;
     CGColorRelease(color);
@@ -61,7 +61,8 @@ wxMediaCtrl2::wxMediaCtrl2(wxWindow * parent)
 wxMediaCtrl2::~wxMediaCtrl2()
 {
     BambuPlayer * player = (BambuPlayer *) m_player;
-    [player dealloc];
+    [player close];
+    [player release];
 }
 
 void wxMediaCtrl2::create_player()
@@ -69,6 +70,7 @@ void wxMediaCtrl2::create_player()
 	auto module = Slic3r::NetworkAgent::get_bambu_source_entry();
 	if (!module) {
 		//not ready yet
+        m_error = -2;
 		BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << "Network plugin not ready currently!";
 		return;
 	}
@@ -78,8 +80,7 @@ void wxMediaCtrl2::create_player()
         return;
     }
     NSView * imageView = (NSView *) GetHandle();
-    BambuPlayer * player = [cls alloc];
-    [player initWithImageView: imageView];
+    BambuPlayer * player = [[cls alloc] initWithImageView: imageView];
     [player setLogger: bambu_log withContext: this];
     m_player = player;
 }
@@ -116,7 +117,13 @@ void wxMediaCtrl2::Play()
 		}
 	}
     BambuPlayer * player2 = (BambuPlayer *) m_player;
-    [player2 play];
+    if (m_error != 0)
+        return;
+    m_error = [player2 play];
+    if (m_error != 0) {
+        NotifyStopped();
+        return;
+    }
     if (m_state != wxMEDIASTATE_PLAYING) {
         m_state = wxMEDIASTATE_PLAYING;
         wxMediaEvent event(wxEVT_MEDIA_STATECHANGED);

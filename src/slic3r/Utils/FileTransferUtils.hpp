@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <atomic>
 #include <functional>
 #include <vector>
 #include <cstddef>
@@ -219,17 +220,11 @@ private:
         }
     }
 
-    void solve_result(ft_job_result result);
-
     FileTransferModule    *m_{};
     FT_JobHandle          *h_{};
     ResultCb               result_cb_{};
     MsgCb                  msg_cb_{};
-    bool                   finished_ = false;
-    int                    res_      = 0;
-    int                    resp_ec_  = 0;
-    std::string            res_json_;
-    std::vector<std::byte> res_bin_;
+    std::atomic<bool>      finished_{false};
 };
 
 namespace detail {

@@ -34,6 +34,13 @@ if (SLIC3R_GUI)
         find_package(wxWidgets 3.3 REQUIRED COMPONENTS base core adv html gl aui net media webview)
     else ()
         find_package(wxWidgets 3.3 CONFIG REQUIRED COMPONENTS html adv gl core base webview aui net media)
+        if (APPLE AND ORCA_MAC_NATIVE_NETWORKING)
+            # Some wxWidgets SDKs also record XQuartz GL/GLU paths from the build host.
+            # Cocoa uses the OpenGL::GL framework already linked by this target.
+            get_target_property(_wx_gl_links wx::wxgl INTERFACE_LINK_LIBRARIES)
+            list(FILTER _wx_gl_links EXCLUDE REGEX "/(libGL|libGLU)\\.dylib$")
+            set_property(TARGET wx::wxgl PROPERTY INTERFACE_LINK_LIBRARIES "${_wx_gl_links}")
+        endif ()
     endif ()
 
     if(UNIX)
@@ -122,6 +129,17 @@ if (NOT WIN32 AND NOT APPLE)
     set_target_properties(OrcaSlicer PROPERTIES OUTPUT_NAME "orca-slicer")
     set(SLIC3R_APP_CMD "orca-slicer")
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/dev-utils/platform/unix/build_linux_image.sh.in ${CMAKE_CURRENT_BINARY_DIR}/build_linux_image.sh USE_SOURCE_PERMISSIONS @ONLY)
+endif ()
+
+if (APPLE AND ORCA_MAC_NATIVE_NETWORKING)
+    add_executable(orca-native-plugin-check slic3r/Utils/MacPluginCheck.cpp)
+    target_include_directories(orca-native-plugin-check PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(orca-native-plugin-check PRIVATE "-framework AppKit")
+    set_target_properties(orca-native-plugin-check PROPERTIES MACOSX_BUNDLE FALSE)
+    add_dependencies(OrcaSlicer orca-native-plugin-check)
+    add_custom_command(TARGET OrcaSlicer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:orca-native-plugin-check>" "$<TARGET_FILE_DIR:OrcaSlicer>"
+        VERBATIM)
 endif ()
 
 target_link_libraries(OrcaSlicer libslic3r cereal::cereal)

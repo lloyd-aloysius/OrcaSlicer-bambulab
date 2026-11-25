@@ -4,7 +4,8 @@ set -e
 set -o pipefail
 SECONDS=0
 
-while getopts ":dpa:snt:xbc:i:1Tuh" opt; do
+MAC_NATIVE_NETWORKING=OFF
+while getopts ":dpa:snt:xbc:i:1TuPh" opt; do
   case "${opt}" in
     d )
         export BUILD_TARGET="deps"
@@ -41,6 +42,7 @@ while getopts ":dpa:snt:xbc:i:1Tuh" opt; do
     1 )
         export CMAKE_BUILD_PARALLEL_LEVEL=1
         ;;
+    P ) MAC_NATIVE_NETWORKING=ON ;;
     T )
         export BUILD_TESTS="1"
         ;;
@@ -59,6 +61,7 @@ while getopts ":dpa:snt:xbc:i:1Tuh" opt; do
         echo "   -c: Set CMake build configuration, default is Release"
         echo "   -i: Add a prefix to ignore during CMake dependency discovery (repeatable), defaults to /opt/local:/usr/local:/opt/homebrew"
         echo "   -1: Use single job for building"
+        echo "   -P: Build for native Mac networking and Bambu Connect handoff"
         echo "   -T: Build and run tests"
         exit 0
         ;;
@@ -121,6 +124,12 @@ echo
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_BUILD_DIR="$PROJECT_DIR/build/$ARCH"
 DEPS_DIR="$PROJECT_DIR/deps"
+DEPS_BUILD_ROOT="$DEPS_DIR/build"
+if [ "$MAC_NATIVE_NETWORKING" = ON ]; then
+    # Autotools dependencies (notably GMP) require a build prefix without spaces.
+    project_key=$(printf '%s' "$PROJECT_DIR" | shasum -a 256 | cut -c1-12)
+    DEPS_BUILD_ROOT="${ORCA_MAC_DEPS_BUILD_ROOT:-$HOME/Library/Caches/OrcaSlicer-build/$project_key}"
+fi
 HOST_RUNTIME_DIR="$PROJECT_DIR/tools/pjarczak_bambu_linux_host/runtime/linux-x86_64"
 HOST_WRAPPER="$PROJECT_DIR/tools/pjarczak_bambu_linux_host/pjarczak-bambu-linux-host-wrapper"
 MAC_RUNTIME_HELPERS_DIR="$PROJECT_DIR/tools/pjarczak_bambu_runtime/macos"
@@ -195,7 +204,7 @@ build_deps() {
     for _ARCH in x86_64 arm64; do
         if [ "$ARCH" == "universal" ] || [ "$ARCH" == "$_ARCH" ]; then
             PROJECT_BUILD_DIR="$PROJECT_DIR/build/$_ARCH"
-            DEPS_BUILD_DIR="$DEPS_DIR/build/$_ARCH"
+            DEPS_BUILD_DIR="$DEPS_BUILD_ROOT/$_ARCH"
             DEPS="$DEPS_BUILD_DIR/OrcaSlicer_dep"
 
             echo "Building deps..."
@@ -216,8 +225,12 @@ pack_deps() {
     echo "Packing deps..."
     (
         set -x
-        cd "$DEPS_DIR"
-        tar -zcvf "OrcaSlicer_dep_mac_${ARCH}_$(date +"%Y%m%d").tar.gz" "build"
+        if [ "$MAC_NATIVE_NETWORKING" = ON ]; then
+            tar -C "$DEPS_BUILD_ROOT" -zcf "$DEPS_DIR/OrcaSlicer_dep_mac_${ARCH}_$(date +"%Y%m%d").tar.gz" .
+        else
+            cd "$DEPS_DIR"
+            tar -zcvf "OrcaSlicer_dep_mac_${ARCH}_$(date +"%Y%m%d").tar.gz" "build"
+        fi
     )
 }
 
@@ -225,7 +238,7 @@ build_slicer() {
     for _ARCH in x86_64 arm64; do
         if [ "$ARCH" == "universal" ] || [ "$ARCH" == "$_ARCH" ]; then
             PROJECT_BUILD_DIR="$PROJECT_DIR/build/$_ARCH"
-            DEPS_BUILD_DIR="$DEPS_DIR/build/$_ARCH"
+            DEPS_BUILD_DIR="$DEPS_BUILD_ROOT/$_ARCH"
             DEPS="$DEPS_BUILD_DIR/OrcaSlicer_dep"
 
             echo "Building slicer for $_ARCH..."
@@ -234,7 +247,16 @@ build_slicer() {
                 mkdir -p "$PROJECT_BUILD_DIR"
                 cd "$PROJECT_BUILD_DIR"
                 if [ "1." != "$BUILD_ONLY". ]; then
-                    cmake "${PROJECT_DIR}"                         -G "${SLICER_CMAKE_GENERATOR}"                         -DORCA_TOOLS=ON                         ${ORCA_UPDATER_SIG_KEY:+-DORCA_UPDATER_SIG_KEY="$ORCA_UPDATER_SIG_KEY"}                         ${BUILD_TESTS:+-DBUILD_TESTS=ON}                         -DCMAKE_BUILD_TYPE="$BUILD_CONFIG"                         -DCMAKE_OSX_ARCHITECTURES="${_ARCH}"                         -DCMAKE_OSX_DEPLOYMENT_TARGET="${OSX_DEPLOYMENT_TARGET}"                         -DCMAKE_IGNORE_PREFIX_PATH="${CMAKE_IGNORE_PREFIX_PATH}"                         ${CMAKE_POLICY_COMPAT}
+                    cmake "${PROJECT_DIR}" \
+                        -G "${SLICER_CMAKE_GENERATOR}" \
+                        -DORCA_TOOLS=ON -DORCA_MAC_NATIVE_NETWORKING="$MAC_NATIVE_NETWORKING" -DDEP_BUILD_DIR="$DEPS_BUILD_DIR" \
+                        ${ORCA_UPDATER_SIG_KEY:+-DORCA_UPDATER_SIG_KEY="$ORCA_UPDATER_SIG_KEY"} \
+                        -DBUILD_TESTS="${BUILD_TESTS:-OFF}" \
+                        -DCMAKE_BUILD_TYPE="$BUILD_CONFIG" \
+                        -DCMAKE_OSX_ARCHITECTURES="${_ARCH}" \
+                        -DCMAKE_OSX_DEPLOYMENT_TARGET="${OSX_DEPLOYMENT_TARGET}" \
+                        -DCMAKE_IGNORE_PREFIX_PATH="${CMAKE_IGNORE_PREFIX_PATH}" \
+                        ${CMAKE_POLICY_COMPAT}
                 fi
                 cmake --build . --config "$BUILD_CONFIG" --target "$SLICER_BUILD_TARGET"
                 cmake --install . --config "$BUILD_CONFIG"
@@ -276,7 +298,12 @@ build_slicer() {
                     find ./OrcaSlicer_profile_validator.app/ -name '.DS_Store' -delete
                 fi
 
-                copy_linux_bridge_runtime_to_app "./OrcaSlicer.app" "$PROJECT_BUILD_DIR/OrcaSlicer"
+                if [ "$MAC_NATIVE_NETWORKING" = OFF ]; then
+                    copy_linux_bridge_runtime_to_app "./OrcaSlicer.app" "$PROJECT_BUILD_DIR/OrcaSlicer"
+                else
+                    codesign --force --sign - ./OrcaSlicer.app
+                    codesign --verify --deep --strict ./OrcaSlicer.app
+                fi
             )
         fi
     done

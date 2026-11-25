@@ -6324,8 +6324,8 @@ int CLI::run(int argc, char **argv)
             for (auto it = plate_data->slice_filaments_info.begin(); it != plate_data->slice_filaments_info.end(); it++) {
                 std::string display_filament_type;
                 it->type  = m_print_config.get_filament_type(display_filament_type, it->id);
-                it->color = filament_color ? filament_color->get_at(it->id) : "#FFFFFF";
-                it->filament_id = filament_id?filament_id->get_at(it->id):"";
+                it->color = filament_color && !filament_color->values.empty() ? filament_color->get_at(it->id) : "#FFFFFF";
+                it->filament_id = filament_id && !filament_id->values.empty() ? filament_id->get_at(it->id) : "";
             }
 
             if (!plate_data->plate_thumbnail.is_valid()) {
@@ -6405,7 +6405,7 @@ int CLI::run(int argc, char **argv)
 
         if (need_regenerate_thumbnail || need_regenerate_no_light_thumbnail || need_regenerate_top_thumbnail) {
             std::vector<std::string> colors;
-            if (filament_color) {
+            if (filament_color && !filament_color->values.empty()) {
                 colors= filament_color->vserialize();
             }
             else
@@ -6421,7 +6421,7 @@ int CLI::run(int argc, char **argv)
 
             int gl_major, gl_minor, gl_verbos;
             glfwGetVersion(&gl_major, &gl_minor, &gl_verbos);
-            BOOST_LOG_TRIVIAL(info) << boost::format("opengl version %1%.%2%.%3%")%gl_major %gl_minor %gl_verbos;
+            BOOST_LOG_TRIVIAL(info) << boost::format("GLFW version %1%.%2%.%3%")%gl_major %gl_minor %gl_verbos;
 
             glfwSetErrorCallback(glfw_callback);
             int ret = glfwInit();
@@ -6432,8 +6432,9 @@ int CLI::run(int argc, char **argv)
             }
             else {
                 BOOST_LOG_TRIVIAL(info) << "glfwInit Success."<< std::endl;
-                glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, gl_major);
-                glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, gl_minor);
+                // GLFW's own version is independent of the OpenGL context version.
+                glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+                glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
                 glfwWindowHint(GLFW_RED_BITS, 8);
                 glfwWindowHint(GLFW_GREEN_BITS, 8);
                 glfwWindowHint(GLFW_BLUE_BITS, 8);
@@ -6460,7 +6461,7 @@ int CLI::run(int argc, char **argv)
             //opengl manager related logic
             {
                 GUI::OpenGLManager opengl_mgr;
-                bool opengl_valid = opengl_mgr.init_gl(false);
+                bool opengl_valid = ret == GLFW_TRUE && glfwGetCurrentContext() && opengl_mgr.init_gl(false);
                 if (!opengl_valid) {
                     BOOST_LOG_TRIVIAL(error) << "init opengl failed! skip thumbnail generating" << std::endl;
                 }

@@ -1,5 +1,8 @@
 #include "libslic3r/Technologies.hpp"
 #include "GUI_App.hpp"
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+#include "MacPluginInstall.hpp"
+#endif
 #include "GUI_Init.hpp"
 #include "GUI_ObjectList.hpp"
 #include "GUI_Factories.hpp"
@@ -1352,6 +1355,19 @@ int GUI_App::download_plugin(std::string name, std::string package_name, Install
     return result;
 }
 
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+static bool activate_native_plugin(const fs::path& source, const fs::path& active, const std::function<bool()>& cancelled)
+{
+    fs::path exe(wxStandardPaths::Get().GetExecutablePath().ToUTF8().data());
+    std::string error;
+    bool installed = install_native_mac_plugin(source.string(), active.string(), (exe.parent_path() / "orca-native-plugin-check").string(),
+                                               cancelled, error);
+    if (!error.empty())
+        BOOST_LOG_TRIVIAL(error) << "Native plug-in installation: " << error;
+    return installed;
+}
+#endif
+
 int GUI_App::install_plugin(std::string name, std::string package_name, InstallProgressFn pro_fn, WasCancelledFn cancel_fn)
 {
     bool cancel = false;
@@ -1361,6 +1377,21 @@ int GUI_App::install_plugin(std::string name, std::string package_name, InstallP
     std::string data_dir_str = data_dir();
     boost::filesystem::path data_dir_path(data_dir_str);
     auto plugin_folder = data_dir_path / name;
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+    if (name == "plugins") {
+        if (pro_fn) pro_fn(InstallStatusNormal, 80, cancel);
+        auto cancelled = [&] { return cancel || m_networking_cancel_update || (cancel_fn && cancel_fn()); };
+        if (cancelled()) return -1;
+        if (!activate_native_plugin(target_file_path, plugin_folder, cancelled)) {
+            if (cancelled()) return -1;
+            if (pro_fn) pro_fn(InstallStatusUnzipFailed, 0, cancel);
+            return InstallStatusUnzipFailed;
+        }
+        app_config->set_bool("installed_networking", true);
+        if (pro_fn) pro_fn(InstallStatusInstallCompleted, 100, cancel);
+        return 0;
+    }
+#endif
     auto backup_folder = plugin_folder / "backup";
     if (!boost::filesystem::exists(plugin_folder))
         boost::filesystem::create_directory(plugin_folder);
@@ -2261,7 +2292,11 @@ void GUI_App::init_webview_runtime()
 void GUI_App::init_app_config()
 {
 	// Profiles for the alpha are stored into the PrusaSlicer-alpha directory to not mix with the current release.
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+    SetAppName(SLIC3R_APP_KEY "-Personal");
+#else
     SetAppName(SLIC3R_APP_KEY);
+#endif
 //	SetAppName(SLIC3R_APP_KEY "-alpha");
 //  SetAppName(SLIC3R_APP_KEY "-beta");
 //	SetAppDisplayName(SLIC3R_APP_NAME);
@@ -3567,6 +3602,11 @@ void GUI_App::copy_network_if_available()
     if (app_config->get("update_network_plugin") != "true")
         return;
 
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+    if (activate_native_plugin(cache_folder / "plugins", plugin_folder, {}))
+        app_config->set("update_network_plugin", "false");
+    return;
+#endif
     std::string cached_version;
     if (boost::filesystem::exists(changelog_file)) {
         try {
@@ -5775,6 +5815,11 @@ void maybe_attach_updater_signature(Http& http, const std::string& canonical_que
 
 void GUI_App::check_new_version_sf(bool show_tips, int by_user)
 {
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+    if (by_user)
+        wxMessageBox(_L("Update this personal build by rebuilding the app from its source repository."), _L("OrcaSlicer Personal"));
+    return;
+#endif
     AppConfig* app_config = wxGetApp().app_config;
     bool       check_stable_only = app_config->get_bool("check_stable_update_only");
     auto version_check_url = app_config->version_check_url();

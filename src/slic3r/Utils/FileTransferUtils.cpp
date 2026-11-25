@@ -83,6 +83,26 @@ void FileTransferTunnel::shutdown()
     if (m_->ft_tunnel_shutdown) (void) m_->ft_tunnel_shutdown(h_);
 }
 
+namespace {
+struct OwnedFileResult {
+    FileTransferModule& api;
+    ft_job_result result;
+    ~OwnedFileResult() {
+        if (api.ft_job_result_destroy) {
+            api.ft_job_result_destroy(&result);
+        } else if (api.ft_free) {
+            api.ft_free(const_cast<char*>(result.json));
+            api.ft_free(const_cast<void*>(result.bin));
+        }
+    }
+    std::vector<std::byte> bytes() const {
+        auto data = static_cast<const std::byte*>(result.bin);
+        if (!data || !result.bin_size) return {};
+        return {data, data + result.bin_size};
+    }
+};
+} // namespace
+
 FileTransferJob::FileTransferJob(FileTransferModule &m, const std::string &params_json) : m_(&m)
 {
     FT_JobHandle *h{};
@@ -96,26 +116,14 @@ FileTransferJob::FileTransferJob(FileTransferModule &m, const std::string &param
         auto *self = reinterpret_cast<FileTransferJob *>(user);
         if (!self) return;
 
+        OwnedFileResult owned{*self->m_, r};
+        self->finished_ = true;
         try {
-            self->finished_ = true;
-            self->solve_result(r);
-
-            if (self->result_cb_) self->result_cb_(self->res_, self->resp_ec_, self->res_json_, self->res_bin_);
-            self->m_->ft_job_result_destroy(&r);
+            if (self->result_cb_)
+                self->result_cb_(r.ec, r.resp_ec, r.json ? r.json : "", owned.bytes());
         } catch (...) {
-            // swallow
+            // Exceptions cannot cross the C callback boundary.
         }
-
-        try {
-            if (auto *mod = self ? self->m_ : nullptr) {
-                if (mod->ft_job_result_destroy)
-                    mod->ft_job_result_destroy(&r);
-                else if (mod->ft_free) {
-                    if (r.json) mod->ft_free((void *) r.json);
-                    if (r.bin) mod->ft_free((void *) r.bin);
-                }
-            }
-        } catch (...) {}
     };
 
     if (m_->ft_job_set_result_cb(h_, tramp, this) == ft_err::FT_EXCEPTION) { throw std::runtime_error("ft_job_set_result_cb failed"); }
@@ -126,14 +134,13 @@ void FileTransferJob::on_result(ResultCb cb) { result_cb_ = std::move(cb); }
 bool FileTransferJob::get_result(int &ec, int &resp_ec, std::string &json, std::vector<std::byte> &bin, uint32_t timeout_ms)
 {
     if (!h_) throw std::runtime_error("job handle invalid");
-    ft_job_result result;
-    if (m_->ft_job_get_result(h_, timeout_ms, &result) == ft_err::FT_EXCEPTION) return false;
-    solve_result(result);
-    m_->ft_job_result_destroy(&result);
-    ec = res_;
-    resp_ec = res_;
-    json    = res_json_;
-    bin     = res_bin_;
+    ft_job_result result{};
+    if (m_->ft_job_get_result(h_, timeout_ms, &result) != FT_OK) return false;
+    OwnedFileResult owned{*m_, result};
+    ec = result.ec;
+    resp_ec = result.resp_ec;
+    json = result.json ? result.json : "";
+    bin = owned.bytes();
     return true;
 }
 
@@ -203,17 +210,6 @@ bool FileTransferJob::get_msg(uint32_t timeout_ms, int &kind, std::string &json)
         m_->ft_free((void *) m.json);
 
     return true;
-}
-
-void FileTransferJob::solve_result(ft_job_result result)
-{
-    res_     = result.ec;
-    resp_ec_ = result.resp_ec;
-
-    res_bin_.clear();
-    if (result.bin && result.bin_size) res_bin_.assign(reinterpret_cast<const std::byte *>(result.bin),
-        reinterpret_cast<const std::byte *>(result.bin) + result.bin_size);
-    res_json_.assign(result.json ? result.json : "");
 }
 
 } // namespace Slic3r

@@ -1,4 +1,7 @@
 #include "MainFrame.hpp"
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+#include "MacBambuConnect.hpp"
+#endif
 
 #include <wx/panel.h>
 #include <wx/notebook.h>
@@ -2725,6 +2728,16 @@ void MainFrame::init_menubar_as_editor()
             [this](wxCommandEvent&) { if (m_plater) wxPostEvent(m_plater, SimpleEvent(EVT_GLTOOLBAR_EXPORT_SLICED_FILE)); }, "menu_export_sliced_file", nullptr,
             [this](){return can_export_gcode(); }, this);
 
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+        append_menu_item(export_menu, wxID_ANY, _L("Open sliced plate in Bambu Connect") + dots,
+            _L("Save the current sliced plate and open it in Bambu Connect"),
+            [this](wxCommandEvent&) {
+                const auto path = m_plater->export_gcode_3mf();
+                if (!path.empty() && !open_in_bambu_connect(path.string()))
+                    wxMessageBox(_L("The sliced file was saved. Install Bambu Connect to open it from OrcaSlicer."),
+                                 _L("Bambu Connect"), wxOK | wxICON_INFORMATION, this);
+            }, "menu_export_sliced_file", nullptr, [this]() { return can_export_gcode(); }, this);
+#endif
         append_menu_item(export_menu, wxID_ANY, _L("Export all plate sliced file") + dots/* + "\t" + ctrl + "G"*/, _L("Export all plate sliced file"),
             [this](wxCommandEvent&) { if (m_plater) wxPostEvent(m_plater, SimpleEvent(EVT_GLTOOLBAR_EXPORT_ALL_SLICED_FILE)); }, "menu_export_sliced_file", nullptr,
             [this]() {return can_export_all_gcode(); }, this);

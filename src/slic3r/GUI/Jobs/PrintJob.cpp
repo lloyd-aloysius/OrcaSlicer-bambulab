@@ -477,14 +477,14 @@ void PrintJob::process(Ctl &ctl)
     auto wait_fn = [this, curr_percent, &obj](int state, std::string job_info) {
             BOOST_LOG_TRIVIAL(info) << "print_job: get_job_info = " << job_info;
 
-            if (!obj->is_support_wait_sending_finish) {
+            if (!obj || !obj->is_support_wait_sending_finish) {
                 return true;
             }
 
             std::string curr_job_id;
             json job_info_j;
             try {
-                std::ignore = job_info_j.parse(job_info);
+                job_info_j = json::parse(job_info);
                 if (job_info_j.contains("job_id")) {
                     curr_job_id = DevJsonValParser::get_longlong_val(job_info_j["job_id"]);
                 }
@@ -502,7 +502,7 @@ void PrintJob::process(Ctl &ctl)
                         BOOST_LOG_TRIVIAL(info) << "print_job: got job_id = " << obj->job_id_ << ", time_out=" << time_out;
                         return true;
                     }
-                    if (obj->is_in_printing_status(obj->print_status)) {
+                    if (curr_job_id.empty() && obj->is_in_printing_status(obj->print_status)) {
                         BOOST_LOG_TRIVIAL(info) << "print_job: printer has enter printing status, s = " << obj->print_status;
                         return true;
                     }
@@ -573,6 +573,12 @@ void PrintJob::process(Ctl &ctl)
                 else {
                     params.comments = (boost::format("failed(%1%)") % result).str();
                 }
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+                if (result < 0 && result != BAMBU_NETWORK_ERR_CANCELED) {
+                    ctl.show_error_info(_u8L("Check the printer's current job before sending this plate again."), 0, "", "");
+                    return;
+                }
+#else
                 if (result < 0) {
                     is_try_lan_mode_failed = true;
                     // try to send with cloud
@@ -580,6 +586,7 @@ void PrintJob::process(Ctl &ctl)
                     ctl.update_status(curr_percent, _u8L("Sending print job through cloud service"));
                     result = m_agent->start_print(params, update_fn, cancel_fn, wait_fn);
                 }
+#endif
             }
             else {
                 BOOST_LOG_TRIVIAL(info) << "print_job: send with cloud";

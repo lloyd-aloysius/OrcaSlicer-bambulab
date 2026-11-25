@@ -765,8 +765,11 @@ void PrinterFileSystem::DeleteFilesContinue()
     std::vector<std::string> paths;
     for (size_t i = 0; i < m_file_list.size(); ++i)
         if ((m_file_list[i].flags & FF_DELETED) && !m_file_list[i].name.empty()) {
-            indexes.push_back(i);
             auto &file = m_file_list[i];
+            // One request accepts paths or names. Leave the other group queued.
+            if ((file.path.empty() && !paths.empty()) || (!file.path.empty() && !names.empty()))
+                continue;
+            indexes.push_back(i);
             if (file.path.empty())
                 names.push_back(file.name);
             else
@@ -790,11 +793,16 @@ void PrinterFileSystem::DeleteFilesContinue()
     auto type = std::make_pair(m_file_type, m_file_storage);
     SendRequest<Void>(
         FILE_DEL, req, nullptr,
-        [indexes, type, names = paths.empty() ? names : paths, bypath = !paths.empty(), this](int, Void const &) {
-            // TODO:
-            for (size_t i = indexes.size() - 1; i != size_t(-1); --i)
-                FileRemoved(type, indexes[i], names[i], bypath);
-            SendChangedEvent(EVT_FILE_CHANGED, indexes.size());
+        [indexes, type, names = paths.empty() ? names : paths, bypath = !paths.empty(), this](int result, Void const &) {
+            for (size_t i = indexes.size(); i-- > 0;) {
+                if (result == SUCCESS || result == FILE_NO_EXIST) {
+                    FileRemoved(type, indexes[i], names[i], bypath);
+                } else {
+                    auto entry = FindFile(type, indexes[i], names[i], bypath);
+                    if (entry.second != size_t(-1)) entry.first[entry.second].flags &= ~FF_DELETED;
+                }
+            }
+            SendChangedEvent(EVT_FILE_CHANGED, indexes.size(), "", result);
             DeleteFilesContinue();
         });
 }
@@ -1139,8 +1147,8 @@ std::pair<PrinterFileSystem::FileList &, size_t> PrinterFileSystem::FindFile(std
     if (index >= file_list.size() || (by_path ? file_list[index].path : file_list[index].name) != name) {
         auto iter = std::find_if(m_file_list.begin(), file_list.end(),
                 [name, by_path](File &f) { return (by_path ? f.path : f.name) == name; });
-        if (iter == m_file_list.end()) return {file_list, -1};
-        index = std::distance(m_file_list.begin(), iter);
+        if (iter == file_list.end()) return {file_list, -1};
+        index = std::distance(file_list.begin(), iter);
     }
     return {file_list, index};
 }
@@ -1150,6 +1158,7 @@ void PrinterFileSystem::FileRemoved(std::pair<FileType, std::string> type, size_
     auto file_index = FindFile(type, index, name, by_path);
     if (file_index.second == size_t(-1))
         return;
+    index = file_index.second;
     if (&file_index.first == &m_file_list) {
         auto removeFromGroup = [](std::vector<size_t> &group, size_t index, size_t total) {
             for (auto iter = group.begin(); iter != group.end(); ++iter) {

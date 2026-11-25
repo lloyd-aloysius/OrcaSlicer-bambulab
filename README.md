@@ -30,7 +30,7 @@ On Linux, a normal installation is enough.
 
 ### macOS
 
-Work in progress.
+The personal Apple Silicon build supports offline slicing, a native networking plug-in for compatible LAN printers, and sliced-plate handoff to Bambu Connect. [Build, setup and repair](SoftFever_doc/macos-personal.md)
 
 
 ## BMCU

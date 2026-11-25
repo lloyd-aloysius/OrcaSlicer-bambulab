@@ -110,6 +110,9 @@ const nlohmann::json* find_manifest_entry(const nlohmann::json& root, const std:
 
 bool enabled()
 {
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+    return false;
+#else
     bool forced = false;
     if (env_flag("PJARCZAK_LINUX_BRIDGE_ENABLED", forced))
         return forced;
@@ -121,11 +124,14 @@ bool enabled()
 #else
     return false;
 #endif
+#endif
 }
 
 bool use_bridge_network_module()
 {
-#if defined(_MSC_VER) || defined(_WIN32)
+#if defined(ORCA_MAC_NATIVE_NETWORKING)
+    return false;
+#elif defined(_MSC_VER) || defined(_WIN32)
     return true;
 #elif defined(__WXMAC__) || defined(__APPLE__)
     return true;

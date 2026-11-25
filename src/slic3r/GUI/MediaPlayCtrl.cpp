@@ -607,6 +607,14 @@ void MediaPlayCtrl::onStateChanged(wxMediaEvent &event)
             return;
         }
     }
+#ifdef __WXMAC__
+    if (state == wxMEDIASTATE_STOPPED && m_media_ctrl->GetLastError() != 0 &&
+        (last_state == MEDIASTATE_LOADING || last_state == wxMEDIASTATE_STOPPED)) {
+        m_failed_code = m_media_ctrl->GetLastError();
+        Stop();
+        return;
+    }
+#endif
     if ((last_state == MEDIASTATE_IDLE || last_state == MEDIASTATE_INITIALIZING) && state == wxMEDIASTATE_STOPPED) { return; }
     if ((last_state == wxMEDIASTATE_PAUSED || last_state == wxMEDIASTATE_PLAYING) && state == wxMEDIASTATE_STOPPED) {
         m_failed_code = m_media_ctrl->GetLastError();

@@ -84,6 +84,10 @@ void BBLPrinterAgent::remember_last_print_request(LastPrintRequestType type,
                                                  WasCancelledFn cancel_fn,
                                                  OnWaitFn wait_fn)
 {
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+    // An acknowledged print must never be replayed after a disconnect.
+    return;
+#endif
     std::lock_guard<std::mutex> lock(m_last_print_request_mutex);
     m_last_print_request.type = type;
     m_last_print_request.params = params;

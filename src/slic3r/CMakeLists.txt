@@ -656,7 +656,9 @@ set(SLIC3R_GUI_SOURCES
 
 add_subdirectory(GUI/DeviceCore)
 add_subdirectory(GUI/DeviceTab)
-add_subdirectory(Utils/PJarczakLinuxBridge)
+if (NOT ORCA_MAC_NATIVE_NETWORKING OR NOT APPLE)
+    add_subdirectory(Utils/PJarczakLinuxBridge)
+endif ()
 
 if (WIN32)
     list(APPEND SLIC3R_GUI_SOURCES
@@ -682,6 +684,9 @@ if (APPLE)
             GUI/wxMediaCtrl2.h
             GUI/wxMediaCtrl3.h
         )
+    if (ORCA_MAC_NATIVE_NETWORKING)
+        list(APPEND SLIC3R_GUI_SOURCES GUI/MacBambuConnect.mm GUI/MacPluginInstall.mm)
+    endif ()
     FIND_LIBRARY(DISKARBITRATION_LIBRARY DiskArbitration)
 else ()
     list(APPEND SLIC3R_GUI_SOURCES

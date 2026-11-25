@@ -14660,13 +14660,13 @@ void Plater::send_to_printer(bool isall)
 }
 
 //BBS export gcode 3mf to file
-void Plater::export_gcode_3mf(bool export_all)
+fs::path Plater::export_gcode_3mf(bool export_all)
 {
     if (p->model.objects.empty())
-        return;
+        return {};
 
     if (p->process_completed_with_error == p->partplate_list.get_curr_plate_index())
-        return;
+        return {};
 
     //calc default_output_file, get default output file from background process
     fs::path default_output_file;
@@ -14677,17 +14677,17 @@ void Plater::export_gcode_3mf(bool export_all)
         // Also if there is something wrong with the current configuration, a pop-up dialog will be shown and the export will not be performed.
         unsigned int state = this->p->update_restart_background_process(false, false);
         if (state & priv::UPDATE_BACKGROUND_PROCESS_INVALID)
-            return;
+            return {};
         default_output_file = this->p->background_process.output_filepath_for_project("");
     }
     catch (const Slic3r::PlaceholderParserError& ex) {
         // Show the error with monospaced font.
         show_error(this, ex.what(), true);
-        return;
+        return {};
     }
     catch (const std::exception& ex) {
         show_error(this, ex.what(), false);
-        return;
+        return {};
     }
     default_output_file.replace_extension(".gcode.3mf");
     default_output_file = fs::path(Slic3r::fold_utf8_to_ascii(default_output_file.string()));
@@ -14723,7 +14723,11 @@ void Plater::export_gcode_3mf(bool export_all)
         int plate_idx = get_partplate_list().get_curr_plate_index();
         if (export_all)
             plate_idx = PLATE_ALL_IDX;
-        export_3mf(output_path, SaveStrategy::Silence | SaveStrategy::SplitModel | SaveStrategy::WithGcode | SaveStrategy::SkipModel, plate_idx); // BBS: silence
+        if (export_3mf(output_path, SaveStrategy::Silence | SaveStrategy::SplitModel | SaveStrategy::WithGcode | SaveStrategy::SkipModel, plate_idx) < 0) {
+            p->exporting_status = ExportingStatus::NOT_EXPORTING;
+            show_error(this, _L("Could not save the sliced plate."));
+            return {};
+        }
 
         RemovableDriveManager& removable_drive_manager = *wxGetApp().removable_drive_manager();
 
@@ -14735,6 +14739,7 @@ void Plater::export_gcode_3mf(bool export_all)
         appconfig.update_last_output_dir(output_path.parent_path().string(), false);
         p->notification_manager->push_exporting_finished_notification(output_path.string(), p->last_output_dir_path, on_removable);
     }
+    return output_path;
 }
 
 void Plater::send_gcode_finish(wxString name)

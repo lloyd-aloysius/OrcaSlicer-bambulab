@@ -17,6 +17,9 @@ namespace {
 
 inline bool is_auto_ignored_hms_error_code(const std::string& raw_error_code)
 {
+#ifdef ORCA_MAC_NATIVE_NETWORKING
+    return false;
+#else
     std::string error_code = boost::to_upper_copy(raw_error_code);
     if (error_code.size() >= 8) {
         error_code = error_code.substr(0, 8);
@@ -26,6 +29,7 @@ inline bool is_auto_ignored_hms_error_code(const std::string& raw_error_code)
            error_code == "0501409D" ||
            error_code == "0502409D" ||
            error_code == "0503409D";
+#endif
 }
 
 } // namespace
