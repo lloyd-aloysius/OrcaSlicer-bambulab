@@ -19,7 +19,7 @@ On 25 November 2026, the packaged app launched from Finder, sliced a model with 
 - Finder opened the app copied from the DMG. An isolated portable profile with networking disabled reached the Untitled editor, quit and reopened from Finder in a new process.
 - The executable on the mounted DMG sliced the repository’s 20 mm cube under a macOS sandbox that denied all network access. It produced 313,139 bytes of G-code with extrusion moves. The standalone G-code matched the bytes in the sliced 3MF and the checksum stored inside it.
 - The packaged plug-in checker loaded the networking and camera libraries installed by the setup wizard. It started and destroyed a signed-out agent under the same network restriction.
-- The targeted CTest passed. The filament-printing suite also passed all 196 assertions across 14 test cases. The manual GitHub Actions build workflow was added and its hosted execution remains unverified.
+- The targeted CTest passed. The filament-printing suite also passed all 196 assertions across 14 test cases.
 
 ## Device integration exercised on the Mac
 

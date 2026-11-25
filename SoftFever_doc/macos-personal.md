@@ -42,7 +42,7 @@ cmake --build build/arm64 --config Release --target native_printer_workflow
 ctest --test-dir build/arm64 -C Release -R '^native_printer_workflow$' --output-on-failure
 ```
 
-Use a fresh output directory for each slice and a new name for each DMG. The manual GitHub Actions workflow **Personal macOS arm64 build** builds the same targets and retains its DMG as a run artifact.
+Use a fresh output directory for each slice and a new name for each DMG.
 
 The printer fixture loads only in the test runner. It has a fake account, an in-memory printer, and local storage. It exercises the app’s plug-in adapters and file browser. The camera checks use the actual vendor player and generated loopback video. With FFmpeg, OpenSSL and MediaMTX 1.21.4 on PATH, run the native tests against your extracted Mac plug-in.
 
